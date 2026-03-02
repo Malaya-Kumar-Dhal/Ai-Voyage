@@ -27,4 +27,5 @@ The application works by collecting user inputs through a clean and intuitive in
 - Groq API / AI backend  
 - Netlify (Deployment)
 
-- If you like this project, feel free to ⭐ the repo!
+
+ ## If you like this project, feel free to ⭐ the repo!
