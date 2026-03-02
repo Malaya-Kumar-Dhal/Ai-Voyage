@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voyage — AI Travel Planner (Powered by Groq)</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=Jost:wght@300;400;500;600&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sand: #f5ede0;
+  --parchment: #ede0cc;
+  --terracotta: #c4622d;
+  --rust: #9e3d1a;
+  --ocean: #2a5c7a;
+  --sage: #5a7a5c;
+  --ink: #1a1410;
+  --ink-soft: #3d2e22;
+  --mist: #8c7b6e;
+  --cream: #faf5ee;
+  --gold: #c8962a;
+  --surface: rgba(255,255,255,0.6);
+  --border: rgba(196,98,45,0.15);
+  --radius: 14px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+/* BG gradient blobs */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 80% 20%, rgba(196,98,45,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 10% 80%, rgba(42,92,122,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, rgba(245,237,224,0.3) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+/* ── Header ── */
+header {
+  padding: 0 40px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(250,245,238,0.85);
+  backdrop-filter: blur(20px);
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+
+.logo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.logo-word {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.logo-tagline {
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.65rem;
+  color: var(--mist);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding-bottom: 3px;
+}
+
+.nav-pills {
+  display: flex;
+  gap: 4px;
+  background: rgba(196,98,45,0.07);
+  border: 1px solid var(--border);
+  border-radius: 40px;
+  padding: 4px;
+}
+
+.nav-pill {
+  padding: 6px 18px;
+  border-radius: 30px;
+  border: none;
+  background: transparent;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--mist);
+  cursor: pointer;
+  transition: all 0.25s;
+  letter-spacing: 0.04em;
+}
+
+.nav-pill.active, .nav-pill:hover {
+  background: var(--terracotta);
+  color: white;
+}
+
+/* ── Main layout ── */
+main {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  height: calc(100vh - 64px);
+}
+
+/* ── Sidebar ── */
+aside {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: rgba(245,237,224,0.5);
+  backdrop-filter: blur(10px);
+  overflow-y: auto;
+}
+
+aside::-webkit-scrollbar { width: 3px; }
+aside::-webkit-scrollbar-thumb { background: var(--parchment); border-radius: 2px; }
+
+.trip-header {
+  padding: 28px 24px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.trip-header h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 18px;
+  letter-spacing: 0.02em;
+}
+
+.form-field {
+  margin-bottom: 14px;
+}
+
+.form-field label {
+  display: block;
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--mist);
+  margin-bottom: 5px;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.85rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  -webkit-appearance: none;
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  border-color: rgba(196,98,45,0.5);
+  box-shadow: 0 0 0 3px rgba(196,98,45,0.08);
+}
+
+.form-field input::placeholder,
+.form-field textarea::placeholder { color: var(--mist); opacity: 0.7; }
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.vibe-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.vibe-btn {
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.5);
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.75rem;
+  color: var(--mist);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.vibe-btn span:first-child { font-size: 1.1rem; }
+
+.vibe-btn:hover {
+  border-color: rgba(196,98,45,0.4);
+  background: rgba(196,98,45,0.06);
+  color: var(--terracotta);
+}
+
+.vibe-btn.selected {
+  border-color: var(--terracotta);
+  background: rgba(196,98,45,0.1);
+  color: var(--terracotta);
+  font-weight: 500;
+}
+
+.plan-btn {
+  width: 100%;
+  background: var(--terracotta);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 13px;
+  font-family: 'Jost', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  transition: all 0.25s;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.plan-btn:hover { background: var(--rust); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(196,98,45,0.3); }
+.plan-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.saved-section {
+  padding: 20px 24px;
+  flex: 1;
+}
+
+.saved-section h3 {
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--mist);
+  margin-bottom: 12px;
+}
+
+.saved-trip {
+  background: rgba(255,255,255,0.6);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.saved-trip:hover {
+  border-color: rgba(196,98,45,0.35);
+  background: rgba(196,98,45,0.05);
+}
+
+.saved-trip .st-dest {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.saved-trip .st-meta {
+  font-size: 0.74rem;
+  color: var(--mist);
+  margin-top: 2px;
+  font-family: 'Courier Prime', monospace;
+}
+
+/* ── Content ── */
+.content {
+  overflow-y: auto;
+  background: transparent;
+}
+
+.content::-webkit-scrollbar { width: 4px; }
+.content::-webkit-scrollbar-thumb { background: var(--parchment); border-radius: 2px; }
+
+/* Panels */
+.panel { display: none; height: 100%; }
+.panel.active { display: block; }
+
+/* Welcome panel */
+.welcome-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 40px;
+}
+
+.welcome-panel .big-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3rem, 6vw, 5rem);
+  font-weight: 300;
+  font-style: italic;
+  line-height: 1.05;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+  animation: fadeUp 0.8s ease both;
+}
+
+.welcome-panel .big-title strong {
+  font-weight: 700;
+  font-style: normal;
+  color: var(--terracotta);
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.welcome-panel .sub {
+  color: var(--mist);
+  font-size: 1rem;
+  font-weight: 300;
+  max-width: 440px;
+  line-height: 1.6;
+  margin-bottom: 48px;
+  animation: fadeUp 0.8s 0.1s ease both;
+}
+
+.destination-inspirations {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  max-width: 680px;
+  width: 100%;
+  animation: fadeUp 0.8s 0.2s ease both;
+}
+
+.dest-card {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-align: left;
+}
+
+.dest-card:hover {
+  border-color: rgba(196,98,45,0.4);
+  background: rgba(255,255,255,0.95);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgba(196,98,45,0.12);
+}
+
+.dest-card .dc-emoji { font-size: 2rem; display: block; margin-bottom: 8px; }
+.dest-card .dc-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.dest-card .dc-tag {
+  font-size: 0.74rem;
+  color: var(--mist);
+  font-family: 'Courier Prime', monospace;
+  margin-top: 4px;
+}
+
+/* Itinerary panel */
+.itinerary-panel {
+  padding: 40px;
+}
+
+.itin-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 36px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.itin-hero-left .destination-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.itin-hero-left .trip-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.meta-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(196,98,45,0.08);
+  border: 1px solid rgba(196,98,45,0.2);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.72rem;
+  color: var(--terracotta);
+  letter-spacing: 0.06em;
+}
+
+.itin-tabs {
+  display: flex;
+  gap: 0;
+  background: rgba(196,98,45,0.07);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  align-self: flex-start;
+}
+
+.itin-tab {
+  padding: 7px 16px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--mist);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.itin-tab.active {
+  background: white;
+  color: var(--terracotta);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+/* Tab contents */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Days */
+.day-card {
+  background: rgba(255,255,255,0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+}
+
+.day-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(196,98,45,0.04);
+}
+
+.day-number {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--terracotta);
+  line-height: 1;
+  min-width: 48px;
+}
+
+.day-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.day-subtitle {
+  font-size: 0.78rem;
+  color: var(--mist);
+  font-family: 'Courier Prime', monospace;
+  margin-top: 2px;
+}
+
+.day-body {
+  padding: 20px 24px;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+.day-body h4 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ocean);
+  margin: 12px 0 4px;
+}
+
+.day-body h4:first-child { margin-top: 0; }
+
+.day-body strong { color: var(--terracotta); font-weight: 600; }
+
+.day-body em { color: var(--sage); font-style: italic; }
+
+.day-body ul {
+  padding-left: 20px;
+  color: var(--ink-soft);
+}
+
+.day-body li { margin-bottom: 4px; }
+
+/* Packing list */
+.packing-section {
+  margin-bottom: 28px;
+}
+
+.packing-section h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.packing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.pack-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.pack-item:hover { background: rgba(255,255,255,0.9); }
+
+.pack-item.checked {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.pack-item .pack-check {
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--mist);
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  transition: all 0.2s;
+}
+
+.pack-item.checked .pack-check {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: white;
+}
+
+/* Budget */
+.budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.budget-card {
+  background: rgba(255,255,255,0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.budget-card .bc-label {
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--mist);
+  margin-bottom: 6px;
+}
+
+.budget-card .bc-amount {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.budget-card .bc-note {
+  font-size: 0.78rem;
+  color: var(--mist);
+  margin-top: 4px;
+}
+
+/* Chat area */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-panel.active { display: flex; }
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+}
+
+.chat-messages::-webkit-scrollbar { width: 3px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--parchment); }
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--mist);
+}
+
+.chat-empty .ce-icon { font-size: 3rem; margin-bottom: 14px; opacity: 0.5; }
+.chat-empty p { font-size: 0.9rem; font-weight: 300; }
+
+.cmsg {
+  margin-bottom: 22px;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  animation: fadeUp 0.3s ease;
+}
+
+.cmsg.user { display: flex; justify-content: flex-end; }
+
+.cmsg.user .bubble {
+  background: var(--terracotta);
+  color: white;
+  border-radius: 16px 16px 4px 16px;
+  padding: 12px 18px;
+  max-width: 70%;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.cmsg.ai .ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-ava {
+  width: 28px; height: 28px;
+  background: var(--ink);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--sand);
+  flex-shrink: 0;
+}
+
+.ai-lbl {
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--mist);
+}
+
+.cmsg.ai .bubble {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid var(--border);
+  border-radius: 4px 16px 16px 16px;
+  padding: 16px 20px;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--ink-soft);
+  max-width: 90%;
+  backdrop-filter: blur(10px);
+}
+
+.cmsg.ai .bubble strong { color: var(--terracotta); }
+.cmsg.ai .bubble em { color: var(--sage); font-style: italic; }
+
+.cmsg.ai .bubble h3 {
+  font-family: 'Cormorant Garamond', serif;
+  color: var(--ocean);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 10px 0 4px;
+}
+
+.cmsg.ai .bubble ul { padding-left: 20px; }
+.cmsg.ai .bubble li { margin-bottom: 4px; }
+
+.typing-dots {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid var(--border);
+  border-radius: 4px 16px 16px 16px;
+  width: fit-content;
+  margin-left: 36px;
+  margin-bottom: 22px;
+  max-width: 760px;
+  margin-right: auto;
+}
+
+.typing-dots.show { display: flex; }
+
+.td { width: 6px; height: 6px; border-radius: 50%; background: var(--mist); animation: tdBounce 1.2s infinite; }
+.td:nth-child(2) { animation-delay: 0.18s; }
+.td:nth-child(3) { animation-delay: 0.36s; }
+@keyframes tdBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+.chat-input-bar {
+  padding: 18px 32px 24px;
+  border-top: 1px solid var(--border);
+  background: rgba(250,245,238,0.9);
+  backdrop-filter: blur(20px);
+}
+
+.chat-input-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.chat-textarea {
+  flex: 1;
+  background: rgba(255,255,255,0.8);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 16px;
+  font-family: 'Jost', sans-serif;
+  font-size: 0.9rem;
+  color: var(--ink);
+  resize: none;
+  outline: none;
+  min-height: 46px;
+  max-height: 120px;
+  line-height: 1.5;
+  transition: border-color 0.2s;
+}
+
+.chat-textarea:focus { border-color: rgba(196,98,45,0.45); }
+.chat-textarea::placeholder { color: var(--mist); }
+
+.chat-send {
+  background: var(--terracotta);
+  color: white;
+  border: none;
+  width: 46px; height: 46px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.chat-send:hover { background: var(--rust); transform: scale(1.05); }
+.chat-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Result content formatting */
+.result-content { max-width: 800px; }
+
+.result-content h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ocean);
+  margin: 14px 0 6px;
+}
+
+.result-content strong { color: var(--terracotta); }
+.result-content em { color: var(--sage); }
+.result-content ul { padding-left: 20px; margin: 6px 0; }
+.result-content li { margin-bottom: 5px; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
+
+.loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  gap: 16px;
+  color: var(--mist);
+}
+
+.loading-overlay .big-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(196,98,45,0.15);
+  border-top-color: var(--terracotta);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-overlay p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.2rem;
+  font-style: italic;
+  color: var(--mist);
+}
+
+
+  
+
+
+  /* Onboarding Screen */
+  .onboard-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: var(--cream);
+    display: flex;
+    animation: fadeIn 0.4s ease;
+  }
+  .onboard-left {
+    width: 52%;
+    background: var(--ink);
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: flex-start;
+    padding: 60px; position: relative; overflow: hidden;
+  }
+  .onboard-left::before {
+    content: ''; position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 30%, rgba(196,98,45,0.2) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 40% at 80% 80%, rgba(42,92,122,0.15) 0%, transparent 60%);
+  }
+  .onboard-left-content { position: relative; z-index: 1; }
+  .onboard-globe { font-size: 3.5rem; margin-bottom: 24px; display: block; }
+  .onboard-headline {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 3.2rem; font-weight: 300; font-style: italic;
+    color: var(--sand); line-height: 1.1;
+    letter-spacing: -0.02em; margin-bottom: 10px;
+  }
+  .onboard-headline strong {
+    font-weight: 700; font-style: normal;
+    color: var(--terracotta); display: block;
+  }
+  .onboard-desc {
+    color: var(--mist); font-size: 0.95rem;
+    line-height: 1.65; margin-top: 20px; max-width: 340px;
+  }
+  .onboard-features { margin-top: 36px; display: flex; flex-direction: column; gap: 12px; }
+  .onboard-feat {
+    display: flex; align-items: center; gap: 12px;
+    color: rgba(245,237,224,0.75); font-size: 0.85rem;
+  }
+  .onboard-feat-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: rgba(196,98,45,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+  }
+  .onboard-right {
+    flex: 1; display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 60px 50px;
+  }
+  .onboard-form { width: 100%; max-width: 380px; }
+  .onboard-form h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2rem; font-weight: 700;
+    color: var(--ink); margin-bottom: 6px;
+  }
+  .onboard-form .sub {
+    color: var(--mist); font-size: 0.88rem;
+    line-height: 1.55; margin-bottom: 32px;
+  }
+  .onboard-step { margin-bottom: 24px; }
+  .step-label {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.68rem; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--mist); margin-bottom: 8px;
+  }
+  .step-num {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--terracotta); color: white;
+    font-size: 0.65rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Jost', sans-serif;
+  }
+  .step-link {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(196,98,45,0.06);
+    border: 1px solid rgba(196,98,45,0.2);
+    border-radius: 10px; padding: 12px 16px;
+    text-decoration: none; color: var(--terracotta);
+    font-size: 0.88rem; font-weight: 500; transition: all 0.2s;
+  }
+  .step-link:hover { background: rgba(196,98,45,0.1); }
+  .step-link span { font-size: 0.8rem; opacity: 0.7; }
+  .key-input {
+    width: 100%; background: rgba(255,255,255,0.9);
+    border: 1.5px solid var(--border); border-radius: 10px;
+    padding: 13px 16px; font-family: 'Jost', sans-serif;
+    font-size: 0.9rem; color: var(--ink); outline: none;
+    transition: all 0.2s;
+  }
+  .key-input:focus {
+    border-color: rgba(196,98,45,0.5);
+    box-shadow: 0 0 0 3px rgba(196,98,45,0.08);
+  }
+  .key-input::placeholder { color: var(--mist); }
+  .key-save-btn {
+    width: 100%; margin-top: 14px;
+    background: var(--ink); color: var(--sand);
+    border: none; border-radius: 12px; padding: 14px;
+    font-family: 'Jost', sans-serif;
+    font-weight: 600; font-size: 0.95rem;
+    cursor: pointer; transition: all 0.25s; letter-spacing: 0.04em;
+  }
+  .key-save-btn:hover {
+    background: var(--terracotta); transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(196,98,45,0.25);
+  }
+  .key-error {
+    color: #c0392b; font-size: 0.8rem; margin-top: 8px;
+    display: none; font-family: 'Courier Prime', monospace;
+  }
+  .key-privacy {
+    margin-top: 16px; font-size: 0.75rem; color: var(--mist);
+    line-height: 1.5; text-align: center;
+    font-family: 'Courier Prime', monospace;
+  }
+  .key-settings-btn {
+    background: none; border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 14px;
+    font-family: 'Jost', sans-serif; font-size: 0.78rem;
+    color: var(--mist); cursor: pointer; transition: all 0.2s;
+  }
+  .key-settings-btn:hover { border-color: var(--terracotta); color: var(--terracotta); }
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <span class="logo-word">Voyage</span>
+      <span class="logo-tagline">AI Travel Planner</span>
+    </div>
+    <button class="key-settings-btn" onclick="resetKey()">🔑 API Key</button>
+    <div class="nav-pills">
+      <button class="nav-pill active" onclick="showView('planner')">Plan Trip</button>
+      <button class="nav-pill" onclick="showView('chat')">Ask AI</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Sidebar -->
+    <aside>
+      <div class="trip-header">
+        <h2>Where to next?</h2>
+
+        <div class="form-field">
+          <label>Destination</label>
+          <input type="text" id="dest" placeholder="Paris, Bali, Tokyo…">
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label>Duration</label>
+            <select id="duration">
+              <option value="3 days">3 days</option>
+              <option value="5 days">5 days</option>
+              <option value="7 days" selected>7 days</option>
+              <option value="10 days">10 days</option>
+              <option value="2 weeks">2 weeks</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Budget</label>
+            <select id="budget">
+              <option value="budget">Budget</option>
+              <option value="mid-range" selected>Mid-range</option>
+              <option value="luxury">Luxury</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label>Travel Style</label>
+          <div class="vibe-grid">
+            <button class="vibe-btn selected" onclick="selectVibe(this, 'Cultural & Historical')"><span>🏛️</span>Culture</button>
+            <button class="vibe-btn" onclick="selectVibe(this, 'Adventure & Outdoors')"><span>🏔️</span>Adventure</button>
+            <button class="vibe-btn" onclick="selectVibe(this, 'Food & Culinary')"><span>🍜</span>Foodie</button>
+            <button class="vibe-btn" onclick="selectVibe(this, 'Relaxation & Wellness')"><span>🧘</span>Relax</button>
+            <button class="vibe-btn" onclick="selectVibe(this, 'Nightlife & Social')"><span>🎉</span>Nightlife</button>
+            <button class="vibe-btn" onclick="selectVibe(this, 'Family-friendly')"><span>👨‍👩‍👧</span>Family</button>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label>Special requests (optional)</label>
+          <textarea id="special" rows="2" placeholder="Solo trip, anniversary, avoid crowds…" style="resize:none;"></textarea>
+        </div>
+
+        <button class="plan-btn" id="planBtn" onclick="generateItinerary()">
+          <span>✈</span> Plan My Trip
+        </button>
+      </div>
+
+      <div class="saved-section">
+        <h3>Recent Trips</h3>
+        <div id="savedTrips">
+          <div class="saved-trip" onclick="loadSample('Kyoto')">
+            <div class="st-dest">Kyoto, Japan</div>
+            <div class="st-meta">7 days · Culture · Mid-range</div>
+          </div>
+          <div class="saved-trip" onclick="loadSample('Amalfi')">
+            <div class="st-dest">Amalfi Coast, Italy</div>
+            <div class="st-meta">5 days · Relaxation · Luxury</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Content -->
+    <div class="content" id="contentArea">
+
+      <!-- Welcome Panel -->
+      <div class="panel active" id="view-welcome">
+        <div class="welcome-panel">
+          <div class="big-title">Dream it.<br><strong>Live it.</strong></div>
+          <p class="sub">Tell us where you want to go and we'll craft a personalized day-by-day itinerary, packing list, and budget — all powered by AI.</p>
+          <div class="destination-inspirations">
+            <div class="dest-card" onclick="quickFill('Tokyo, Japan', '7 days', 'Cultural & Historical')">
+              <span class="dc-emoji">🗾</span>
+              <div class="dc-name">Tokyo</div>
+              <div class="dc-tag">7 days · Culture</div>
+            </div>
+            <div class="dest-card" onclick="quickFill('Santorini, Greece', '5 days', 'Relaxation & Wellness')">
+              <span class="dc-emoji">🇬🇷</span>
+              <div class="dc-name">Santorini</div>
+              <div class="dc-tag">5 days · Relax</div>
+            </div>
+            <div class="dest-card" onclick="quickFill('Machu Picchu, Peru', '7 days', 'Adventure & Outdoors')">
+              <span class="dc-emoji">🦙</span>
+              <div class="dc-name">Machu Picchu</div>
+              <div class="dc-tag">7 days · Adventure</div>
+            </div>
+            <div class="dest-card" onclick="quickFill('Marrakech, Morocco', '5 days', 'Cultural & Historical')">
+              <span class="dc-emoji">🕌</span>
+              <div class="dc-name">Marrakech</div>
+              <div class="dc-tag">5 days · Culture</div>
+            </div>
+            <div class="dest-card" onclick="quickFill('Bali, Indonesia', '7 days', 'Relaxation & Wellness')">
+              <span class="dc-emoji">🌴</span>
+              <div class="dc-name">Bali</div>
+              <div class="dc-tag">7 days · Relax</div>
+            </div>
+            <div class="dest-card" onclick="quickFill('New York City, USA', '5 days', 'Food & Culinary')">
+              <span class="dc-emoji">🗽</span>
+              <div class="dc-name">New York</div>
+              <div class="dc-tag">5 days · Foodie</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Itinerary Panel -->
+      <div class="panel" id="view-itinerary">
+        <div class="itinerary-panel" id="itineraryContent"></div>
+      </div>
+
+      <!-- Chat Panel -->
+      <div class="panel" id="view-chat">
+        <div class="chat-panel active">
+          <div class="chat-messages" id="chatMessages">
+            <div class="chat-empty" id="chatEmpty">
+              <div class="ce-icon">✈️</div>
+              <p>Ask me anything about travel —<br>visas, weather, hidden gems, local customs…</p>
+            </div>
+            <div class="typing-dots" id="typingDots">
+              <div class="td"></div><div class="td"></div><div class="td"></div>
+            </div>
+          </div>
+          <div class="chat-input-bar">
+            <div class="chat-input-inner">
+              <textarea class="chat-textarea" id="chatInput" placeholder="Is Bali safe for solo female travelers? Best time to visit Japan?" rows="1" onkeydown="chatKeydown(event)" oninput="autoResize(this)"></textarea>
+              <button class="chat-send" id="chatSendBtn" onclick="sendChat()">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+
+
+
+  <!-- Onboarding Screen -->
+  <div class="onboard-overlay" id="keyModal" style="display:none;">
+    <div class="onboard-left">
+      <div class="onboard-left-content">
+        <span class="onboard-globe">🌍</span>
+        <div class="onboard-headline">Plan your next<br><strong>adventure.</strong></div>
+        <p class="onboard-desc">AI-powered travel planning — day-by-day itineraries, packing lists, budgets, and insider tips for any destination on Earth.</p>
+        <div class="onboard-features">
+          <div class="onboard-feat"><div class="onboard-feat-icon">🗺️</div>Personalized day-by-day itineraries</div>
+          <div class="onboard-feat"><div class="onboard-feat-icon">🎒</div>Smart packing lists per destination</div>
+          <div class="onboard-feat"><div class="onboard-feat-icon">💬</div>Ask anything — visas, weather, tips</div>
+          <div class="onboard-feat"><div class="onboard-feat-icon">💸</div>Budget breakdown & cost estimates</div>
+        </div>
+      </div>
+    </div>
+    <div class="onboard-right">
+      <div class="onboard-form">
+        <h2>Get Started Free</h2>
+        <p class="sub">Uses <strong>Groq AI</strong> — completely free, no credit card needed. Grab your free API key in 30 seconds.</p>
+        <div class="onboard-step">
+          <div class="step-label"><div class="step-num">1</div> Get your free API key</div>
+          <a class="step-link" href="https://console.groq.com/keys" target="_blank">
+            Open console.groq.com → API Keys <span>↗</span>
+          </a>
+        </div>
+        <div class="onboard-step">
+          <div class="step-label"><div class="step-num">2</div> Paste it below</div>
+          <input class="key-input" type="password" id="keyInput" placeholder="gsk_••••••••••••••••••••••" />
+          <div class="key-error" id="keyError">⚠ Key looks invalid — should start with gsk_</div>
+        </div>
+        <button class="key-save-btn" onclick="saveKey()">Start Planning →</button>
+        <p class="key-privacy">🔒 Stored only in your browser's localStorage. Never sent to anyone except Groq's API directly.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+  // ── API Key management ────────────────────────────────────────────────────
+
+  function checkApiKey() {
+    const key = localStorage.getItem('voyage_api_key');
+    document.getElementById('keyModal').style.display = key ? 'none' : 'flex';
+  }
+  function saveKey() {
+    const val = document.getElementById('keyInput').value.trim();
+    if (!val.startsWith('gsk_') || val.length < 20) {
+      document.getElementById('keyError').style.display = 'block';
+      return;
+    }
+    localStorage.setItem('voyage_api_key', val);
+    document.getElementById('keyModal').style.display = 'none';
+  }
+  function resetKey() {
+    localStorage.removeItem('voyage_api_key');
+    document.getElementById('keyInput').value = '';
+    document.getElementById('keyModal').style.display = 'flex';
+  }
+  window.addEventListener('DOMContentLoaded', checkApiKey);
+
+  const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+  const getKey = () => localStorage.getItem('voyage_api_key') || '';
+const MODEL = 'llama-3.3-70b-versatile';
+
+let selectedVibe = 'Cultural & Historical';
+let chatHistory = [];
+let currentTrip = null;
+let activeItinTab = 'itinerary';
+
+// ── View switching ────────────────────────────────────────────────────────────
+function showView(view) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+
+  if (view === 'chat') {
+    document.getElementById('view-chat').classList.add('active');
+    document.querySelectorAll('.nav-pill')[1].classList.add('active');
+  } else {
+    if (!currentTrip) {
+      document.getElementById('view-welcome').classList.add('active');
+    } else {
+      document.getElementById('view-itinerary').classList.add('active');
+    }
+    document.querySelectorAll('.nav-pill')[0].classList.add('active');
+  }
+}
+
+// ── Vibe selection ────────────────────────────────────────────────────────────
+function selectVibe(el, vibe) {
+  document.querySelectorAll('.vibe-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedVibe = vibe;
+}
+
+// ── Quick fill ────────────────────────────────────────────────────────────────
+function quickFill(dest, dur, vibe) {
+  document.getElementById('dest').value = dest;
+  document.getElementById('duration').value = dur;
+  document.querySelectorAll('.vibe-btn').forEach(b => {
+    if (b.textContent.toLowerCase().includes(vibe.split(' ')[0].toLowerCase())) {
+      b.classList.add('selected');
+      selectedVibe = vibe;
+    } else {
+      b.classList.remove('selected');
+    }
+  });
+  generateItinerary();
+}
+
+// ── Load sample ───────────────────────────────────────────────────────────────
+function loadSample(dest) {
+  document.getElementById('dest').value = dest === 'Kyoto' ? 'Kyoto, Japan' : 'Amalfi Coast, Italy';
+  document.getElementById('duration').value = dest === 'Kyoto' ? '7 days' : '5 days';
+  document.getElementById('budget').value = dest === 'Kyoto' ? 'mid-range' : 'luxury';
+  generateItinerary();
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ── Generate itinerary ────────────────────────────────────────────────────────
+async function generateItinerary() {
+  const dest = document.getElementById('dest').value.trim();
+  const duration = document.getElementById('duration').value;
+  const budget = document.getElementById('budget').value;
+  const special = document.getElementById('special').value.trim();
+
+  if (!dest) {
+    document.getElementById('dest').focus();
+    document.getElementById('dest').style.borderColor = 'rgba(196,98,45,0.6)';
+    setTimeout(() => document.getElementById('dest').style.borderColor = '', 2000);
+    return;
+  }
+
+  currentTrip = { dest, duration, budget, vibe: selectedVibe };
+
+  const btn = document.getElementById('planBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Planning…';
+
+  // Switch to itinerary view, show loading
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-pill')[0].classList.add('active');
+  document.getElementById('view-itinerary').classList.add('active');
+
+  document.getElementById('itineraryContent').innerHTML = `
+    <div class="loading-overlay">
+      <div class="big-spinner"></div>
+      <p>Crafting your perfect trip to ${dest}…</p>
+    </div>`;
+
+  const prompt = `Create a detailed ${duration} travel itinerary for ${dest}.
+Travel style: ${selectedVibe}
+Budget level: ${budget}
+${special ? 'Special notes: ' + special : ''}
+
+Please provide:
+
+1. A day-by-day itinerary with morning, afternoon, and evening activities for each day. For each day give it a creative title like "Day 1: Arrival & First Impressions". Include specific places, neighborhoods, restaurants, and experiences.
+
+2. A PACKING LIST organized by category: Clothing, Documents & Money, Tech & Gadgets, Health & Hygiene, Destination-specific items.
+
+3. A BUDGET BREAKDOWN with estimated costs for: Flights (round trip estimate), Accommodation per night, Food per day, Activities per day, Transport per day, Total estimated trip cost.
+
+4. LOCAL TIPS: 5 insider tips that most tourists don't know about ${dest}.
+
+Format clearly with headers. Be specific with real place names and genuine recommendations. Make it feel like advice from a well-traveled friend.`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getKey() },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1000,
+        messages: [
+          { role: 'system', content: 'You are an expert travel planner with deep knowledge of destinations worldwide. You give specific, genuine recommendations — real restaurant names, neighborhoods, hidden gems. Your itineraries feel like advice from a well-traveled friend, not a generic travel guide. Be warm, specific, and enthusiastic.' },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(`${response.status} ${response.statusText}: ${errData.error?.message || 'Check your API key'}`);
+    }
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    renderItinerary(dest, duration, budget, text);
+  } catch (err) {
+    const msg = err.message || String(err);
+    document.getElementById('itineraryContent').innerHTML = `
+      <div style="padding:40px;">
+        <div style="color:#c0392b;font-family:'Courier Prime',monospace;font-size:0.85rem;margin-bottom:12px;">⚠️ API Error</div>
+        <div style="color:var(--mist);font-size:0.9rem;line-height:1.6;">${msg}</div>
+        <div style="margin-top:16px;font-size:0.8rem;color:var(--mist);">
+          Check: Is your Groq API key correct? Click the 🔑 API Key button in the header to re-enter it.
+        </div>
+      </div>`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>✈</span> Plan My Trip';
+}
+
+function renderItinerary(dest, duration, budget, rawText) {
+  const sections = parseItinerary(rawText);
+
+  document.getElementById('itineraryContent').innerHTML = `
+    <div class="itin-hero">
+      <div class="itin-hero-left">
+        <div class="destination-name">${dest}</div>
+        <div class="trip-meta">
+          <span class="meta-tag">📅 ${duration}</span>
+          <span class="meta-tag">💼 ${budget.charAt(0).toUpperCase() + budget.slice(1)}</span>
+          <span class="meta-tag">✨ ${selectedVibe}</span>
+        </div>
+      </div>
+      <div class="itin-tabs">
+        <button class="itin-tab active" onclick="switchItinTab('itinerary', this)">Itinerary</button>
+        <button class="itin-tab" onclick="switchItinTab('packing', this)">Packing</button>
+        <button class="itin-tab" onclick="switchItinTab('budget', this)">Budget</button>
+        <button class="itin-tab" onclick="switchItinTab('tips', this)">Tips</button>
+      </div>
+    </div>
+
+    <div class="tab-content active" id="tab-itinerary">
+      ${sections.itinerary}
+    </div>
+    <div class="tab-content" id="tab-packing">
+      ${sections.packing}
+    </div>
+    <div class="tab-content" id="tab-budget">
+      ${sections.budget}
+    </div>
+    <div class="tab-content" id="tab-tips">
+      ${sections.tips}
+    </div>
+  `;
+
+  // Add packing checkbox behavior
+  document.querySelectorAll('.pack-item').forEach(item => {
+    item.addEventListener('click', () => {
+      item.classList.toggle('checked');
+      const check = item.querySelector('.pack-check');
+      check.textContent = item.classList.contains('checked') ? '✓' : '';
+    });
+  });
+}
+
+function switchItinTab(tab, el) {
+  document.querySelectorAll('.itin-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+function parseItinerary(text) {
+  // Parse raw text into sections
+  const lines = text.split('\n');
+  let itinLines = [], packLines = [], budgetLines = [], tipsLines = [];
+  let current = 'itinerary';
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (lower.includes('packing list') || lower.includes('what to pack')) current = 'packing';
+    else if (lower.includes('budget') || lower.includes('cost')) current = 'budget';
+    else if (lower.includes('local tip') || lower.includes('insider tip') || lower.includes('pro tip')) current = 'tips';
+    else if (lower.match(/day \d/) || lower.includes('itinerary')) current = 'itinerary';
+
+    if (current === 'itinerary') itinLines.push(line);
+    else if (current === 'packing') packLines.push(line);
+    else if (current === 'budget') budgetLines.push(line);
+    else tipsLines.push(line);
+  }
+
+  return {
+    itinerary: formatDays(itinLines.join('\n')),
+    packing: formatPacking(packLines.join('\n')),
+    budget: formatBudget(budgetLines.join('\n')),
+    tips: formatTips(tipsLines.join('\n'))
+  };
+}
+
+function formatDays(text) {
+  // Split on lines that start with Day N (with optional ## prefix)
+  const dayRegex = /^(?:#+\s*)?Day\s*(\d+)(?:\s*[:—–-]\s*)?(.*)$/im;
+  const lines = text.split('\n');
+  
+  const days = [];
+  let current = null;
+
+  for (const line of lines) {
+    const match = line.match(/^(?:#+\s*)?Day\s*(\d+)(?:\s*[:—–-]\s*)?(.*)$/i);
+    if (match) {
+      if (current) days.push(current);
+      current = { num: match[1], title: match[2].replace(/\*+/g,'').trim(), body: [] };
+    } else if (current) {
+      current.body.push(line);
+    }
+  }
+  if (current) days.push(current);
+
+  // Fallback: no days found, render as one block
+  if (days.length === 0) {
+    return `<div class="day-card"><div class="day-body result-content">${formatText(text)}</div></div>`;
+  }
+
+  return days.map(day => {
+    const num = String(day.num).padStart(2, '0');
+    const title = day.title || ('Day ' + day.num);
+    const body = day.body.join('\n').trim();
+    return `
+      <div class="day-card">
+        <div class="day-header">
+          <div class="day-number">${num}</div>
+          <div>
+            <div class="day-title">${title}</div>
+          </div>
+        </div>
+        <div class="day-body result-content">${formatText(body)}</div>
+      </div>`;
+  }).join('');
+}
+
+function formatPacking(text) {
+  if (!text.trim()) return '<div style="padding:20px;color:var(--mist)">Packing list included in itinerary above.</div>';
+
+  // Try to extract categories
+  const categories = text.split(/\n(?=[A-Z][^\n]+:)/);
+  if (categories.length < 2) {
+    // Fallback grid from bullet points
+    const items = text.match(/[-•*]\s*([^\n]+)/g) || [];
+    return `<div class="packing-section"><h3>Packing List</h3><div class="packing-grid">${
+      items.map(i => `<div class="pack-item"><div class="pack-check"></div>${i.replace(/^[-•*]\s*/, '')}</div>`).join('')
+    }</div></div>`;
+  }
+
+  return categories.map(cat => {
+    const lines = cat.split('\n');
+    const title = lines[0].replace(/[:#*]+/g, '').trim();
+    const items = lines.slice(1).filter(l => l.match(/[-•*]\s*/)).map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(Boolean);
+    if (!items.length) return '';
+    return `<div class="packing-section">
+      <h3>${title}</h3>
+      <div class="packing-grid">${items.map(i => `<div class="pack-item"><div class="pack-check"></div>${i}</div>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function formatBudget(text) {
+  if (!text.trim()) return '<div style="padding:20px;color:var(--mist)">Budget breakdown included in itinerary above.</div>';
+
+  // Extract cost lines
+  const costLines = text.match(/[^\n]*\$[0-9,]+[^\n]*/g) || [];
+  const cards = costLines.slice(0, 6).map(line => {
+    const match = line.match(/\$([0-9,]+)/);
+    const amount = match ? match[0] : '';
+    const label = line.replace(/\*+/g, '').replace(/\$[0-9,]+[^\n]*/,'').replace(/[-:]/g,'').trim();
+    const note = line.replace(label, '').replace(/^[-:\s]+/, '').trim();
+    return `<div class="budget-card">
+      <div class="bc-label">${label}</div>
+      <div class="bc-amount">${amount}</div>
+      <div class="bc-note">${note.replace(/\$[0-9,]+/, '').trim()}</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="budget-grid">${cards || '<div style="color:var(--mist)">See details below.</div>'}</div>
+    <div class="day-card"><div class="day-body result-content">${formatText(text)}</div></div>`;
+}
+
+function formatTips(text) {
+  if (!text.trim()) return '<div style="padding:20px;color:var(--mist)">Tips included in itinerary above.</div>';
+  return `<div class="day-card"><div class="day-body result-content">${formatText(text)}</div></div>`;
+}
+
+function formatText(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/^###?\s+(.+)$/gm, '<h3>$1</h3>')
+    .replace(/^##\s+(.+)$/gm, '<h3>$1</h3>')
+    .replace(/^#\s+(.+)$/gm, '<h3>$1</h3>')
+    .replace(/^[-•]\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[^]*?<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/^(.)/gm, (m, p) => p !== '<' ? '<p>' + m : m)
+    .replace(/<p>(<[uoh])/g, '$1');
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+function chatKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  document.getElementById('chatEmpty').style.display = 'none';
+
+  const sendBtn = document.getElementById('chatSendBtn');
+  sendBtn.disabled = true;
+  input.value = '';
+  input.style.height = 'auto';
+
+  appendChatMsg('user', msg);
+  chatHistory.push({ role: 'user', content: msg });
+
+  const td = document.getElementById('typingDots');
+  td.classList.add('show');
+  td.parentNode.scrollTop = td.parentNode.scrollHeight;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getKey() },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1000,
+        messages: [
+          { role: 'system', content: `You are Voyage, a friendly and knowledgeable AI travel assistant. You have deep expertise in destinations worldwide, travel logistics, cultural norms, visa requirements, best seasons to visit, hidden gems, food recommendations, safety tips, and budget advice. Be warm, specific, and genuinely helpful. Give real recommendations, not generic advice.${currentTrip ? ' The user is currently planning a trip to ' + currentTrip.dest + '.' : ''}` },
+          ...chatHistory
+        ]
+      })
+    });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(`${response.status} ${response.statusText}: ${errData.error?.message || 'Check your API key'}`);
+    }
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content || 'Sorry, I had trouble with that.';
+    chatHistory.push({ role: 'assistant', content: reply });
+    td.classList.remove('show');
+    appendChatMsg('ai', reply);
+  } catch(err) {
+    td.classList.remove('show');
+    appendChatMsg('ai', '⚠️ Error: ' + (err.message || 'Connection failed. Check your API key via the 🔑 button in the header.'));
+  }
+
+  sendBtn.disabled = false;
+}
+
+function appendChatMsg(role, text) {
+  const container = document.getElementById('chatMessages');
+  const td = document.getElementById('typingDots');
+
+  const div = document.createElement('div');
+  div.className = `cmsg ${role}`;
+
+  if (role === 'user') {
+    div.innerHTML = `<div class="bubble">${escHtml(text)}</div>`;
+  } else {
+    div.innerHTML = `
+      <div class="ai-header">
+        <div class="ai-ava">V</div>
+        <div class="ai-lbl">Voyage AI</div>
+      </div>
+      <div class="bubble">${formatText(text)}</div>`;
+  }
+
+  container.insertBefore(div, td);
+  container.scrollTop = container.scrollHeight;
+}
+
+function escHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+</script>
+</body>
+</html>
